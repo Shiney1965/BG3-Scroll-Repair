@@ -5,17 +5,20 @@ local RosterList = Ext.Require("Client/RosterList.lua")
 
 local PartyTab = {}
 
-local root = nil       -- the IMGUI container we draw into
-local statusText = nil -- last message from the server
+-- Containers we draw into: the MCM tab and/or the !pp window. Each keeps
+-- its own status line.
+local roots = {}
 
 local function setStatus(text)
-    if statusText then pcall(function() statusText.Label = tostring(text or "") end) end
+    for _, r in ipairs(roots) do
+        if r.status then pcall(function() r.status.Label = tostring(text or "") end) end
+    end
 end
 
-local function render(reply)
-    if not root then return end
+local function render(slot, reply)
+    local root = slot.root
     RosterList.Clear(root)
-    statusText = nil
+    slot.status = nil
 
     local isHost = Ext.Net.IsHost()
     local entries = reply.entries or {}
@@ -57,10 +60,10 @@ local function render(reply)
     refresh.SameLine = true
     refresh.OnClick = PartyTab.Refresh
 
-    if reply.pending and reply.pending.stage == "trimmed" then
+    if reply.pending and reply.pending.trimmed then
         root:AddSeparator()
-        root:AddText("Your party was trimmed to four (" .. tostring(reply.pending.reason) .. ").")
-        local restore = root:AddButton("Restore full party")
+        root:AddText("Some of your party are waiting in camp after a long rest.")
+        local restore = root:AddButton("Restore")
         restore.Disabled = not isHost
         restore.OnClick = function()
             setStatus("Restoring...")
@@ -71,15 +74,17 @@ local function render(reply)
         end
     end
 
-    statusText = root:AddText("")
+    slot.status = root:AddText("")
     onChange(list:Count())
 end
 
 function PartyTab.Refresh()
-    if not root then return end
+    if #roots == 0 then return end
     PP.Net.Roster:RequestToServer({}, function(reply)
-        local ok, err = pcall(render, reply or {})
-        if not ok then PP.Log("could not draw the Party tab: " .. tostring(err)) end
+        for _, slot in ipairs(roots) do
+            local ok, err = pcall(render, slot, reply or {})
+            if not ok then PP.Log("could not draw the Party list: " .. tostring(err)) end
+        end
     end)
 end
 
@@ -87,8 +92,12 @@ function PartyTab.SetStatus(text) setStatus(text) end
 
 -- Draw into any IMGUI container (the MCM tab, or a standalone window).
 function PartyTab.Attach(container)
-    root = container
-    root:AddText("Loading...")
+    local known = false
+    for _, slot in ipairs(roots) do
+        if slot.root == container then known = true end
+    end
+    if not known then roots[#roots + 1] = { root = container } end
+    container:AddText("Loading...")
     PartyTab.Refresh()
 end
 

@@ -1,5 +1,5 @@
 -- Party Picker (client): the window that appears when the game needs a party
--- of four (long rest, Grymforge raft) and the party is larger.
+-- of four (long rest) and the party is larger.
 
 local RosterList = Ext.Require("Client/RosterList.lua")
 
@@ -9,14 +9,9 @@ local window = nil
 
 local INTRO = {
     rest = {
-        "The camp has four beds, so a long rest only works with four in the party.",
+        "The camp has four beds, and the game only puts four party members to bed.",
         "Choose who stays with you tonight. The others wait in camp",
         "and rejoin when you wake up.",
-    },
-    raft = {
-        "The raft to Grymforge carries four.",
-        "Choose who crosses with you. The others go to camp",
-        "and rejoin when the raft lands.",
     },
 }
 
@@ -62,7 +57,7 @@ local function render(reason, size, reply)
     local entries = reply.entries or {}
     local taken = 0
     for _, e in ipairs(entries) do
-        if e.locked then taken = taken + 1 end
+        if e.locked and e.active then taken = taken + 1 end
     end
     local pre = {}
     for _, e in ipairs(entries) do
@@ -75,14 +70,23 @@ local function render(reason, size, reply)
     -- Only party members (and camp companions, in case someone swapped) can be chosen.
     local available = 0
     for _, e in ipairs(entries) do
-        if not e.dead then available = available + 1 end
+        if not e.dead and (e.active or not e.locked) then available = available + 1 end
     end
     local need = math.min(size, available)
+    local lockedCount = 0
+    for _, e in ipairs(entries) do
+        if e.locked and e.active then lockedCount = lockedCount + 1 end
+    end
+    if lockedCount > size then
+        -- Several players' characters: this mod never moves those.
+        w:AddText(string.format("%d characters belong to players and cannot be sent to camp,", lockedCount))
+        w:AddText("so the party cannot be trimmed to four here.")
+    end
 
     local countText, confirm
     local function onChange(n)
         if countText then countText.Label = string.format("Selected %d of %d", n, need) end
-        if confirm then confirm.Disabled = (n ~= need) end
+        if confirm then confirm.Disabled = (n ~= need) or lockedCount > size end
     end
 
     local list = RosterList.Draw(w, entries, {

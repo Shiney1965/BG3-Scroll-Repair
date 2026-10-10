@@ -39,10 +39,18 @@ Larian's own files, so the game patch they match is unknown.
      `DB_Camp_PlayerNotReadyForNightMode_CustomStoryReason`, after which
      `PROC_Camp_TryEnterNightModeFailed(player, reason)` runs (L3812–3835, L620–648).
    - `_Greevers_Little_Helpers.txt` L3603–3609 uses it to block resting during "REALLY_BlockFastTravel".
-2. **Ebonlake raft to Grymforge (Act 1).** There are four passenger positions per dock, and
-   `PROC_UND_EbonLake_RaftUsedReadyCheck` collects four players for `ReadyCheckSpecific`.
-   - The script already blocks the ready check for Glut's owner with `SetReadyCheckBlocked(player, 1)`.
-   - Source: `Act1_UND_EbonLake.txt` (L22–36, L210–371) as copied inside
+2. **Ebonlake raft to Grymforge (Act 1).**
+   - `PROC_UND_EbonLake_Raft_ComposeCrew` puts every `DB_Players` member of the party group in the
+     crew.
+   - `PROC_UND_EbonLake_Raft_Disembark` lands crew members one per index from
+     `DB_UND_EbonLake_Raft_Locations_PlayerPositions`. That table only has indexes 1–4 per dock, so
+     members 5+ are never teleported.
+   - At the cave and camp docks all four indexes use the same trigger. On the lake, each index has
+     its own trigger.
+   - The ready check (`QRY_UND_EbonLake_GetPlayerInRaftTrigger`) collects only characters of
+     *different users* ("we need unique user characters"). In single player the dialog starts
+     without a ready check, so the crossing cannot be held there. Adding positions is the fix.
+   - Source: `Act1_UND_EbonLake.txt` (L22–36, L210–330, L400–600), as copied inside
      [Yoonmoonsik/CombatLottery](https://github.com/Yoonmoonsik/CombatLottery/blob/ef9213d8d14d664ce9d57019c6dd5aee1955bc3f/Mods/CombatLottery88_87ac7b92-b36f-c190-f587-cbfb40feb304/Story/RawFiles/Goals/Act1_UND_EbonLake.txt).
      That copy sits inside another mod and may have been edited.
 
@@ -65,7 +73,11 @@ Signatures are from [LaughingLeader's generated Osi.lua](https://github.com/Laug
 - Origins: `PROC_GLO_PartyMembers_CheckAdd(origin, player)`. It only adds while the global flag
   `GEN_MaxPlayerCountReached` is clear, and that flag is recomputed by `PROC_CheckPartyFull`
   ([_GLO_Shared_PartyMembers.txt L103–153, L476–530](https://github.com/Interzoneism/qdnd/blob/b4f963a57b3a0265beac871fbf23dbd09e13cf65/BG3_Data/Shared/Mods/Shared/Story/RawFiles/Goals/_GLO_Shared_PartyMembers.txt)).
-- Hirelings: `PROC_Hirelings_AddToParty(hireling, avatar)`.
+- Hirelings: the game brings a hireling back from camp with `PROC_Hirelings_TakeFromCamp(hireling, avatar)`.
+  That calls `PROC_Hirelings_AddToParty` and lowers `Hirelings_InCamp_Count`.
+- Hirelings to camp: the game calls `PROC_GLO_PartyMembers_Remove(hireling, avatar, 0)`, then
+  `PROC_Hirelings_SendToCamp(hireling)`, which sets `Hireling_State_InCamp` and raises the count
+  (SharedDev `Hirelings.txt` L447–458, L670–682, L1095–1096).
 - Usage in other mods:
   - CheckAdd followed by `TeleportTo` and `AttachToPartyGroup`:
     [Focus Lodestones as patched by DIQ](https://github.com/Difficulty-Immersion-Quality/DIQ-Misc-Patches/blob/main/DIQ%20Misc%20Patches%20-%20Overrides/Mods/FocusLodestones/ScriptExtender/Lua/Shared/RecruitmentManager.lua).
@@ -83,10 +95,17 @@ Signatures are from [LaughingLeader's generated Osi.lua](https://github.com/Laug
 - `DB_Avatars`, `DB_InCamp`, `DB_Hirelings_Hired`.
 - `DB_PartyMembers` also includes summons and followers, so it is not used.
 
+**Host character**
+- `GetHostCharacter` returns the character the host *controls*. That can be a companion: the game's
+  own `_GLO_Shared_Origins.txt` tests `GetHostCharacter(_Avatar) AND NOT DB_Avatars(_Avatar)`.
+- Party Picker therefore recruits and dismisses "by" the host's avatar, found through `DB_Avatars`
+  plus `GetReservedUserID`, and never moves the controlled character.
+
 **Guards**
 - Focus Lodestones refuses moves when the character is in `DB_InDangerZone`, any
-  `DB_FastTravelBlock_*_StatusSet`, combat, or is incapacitated. Party Picker copies the DB and
-  combat checks.
+  `DB_FastTravelBlock_*_StatusSet` (BlockedZone, CantMove, Arrested, CampNightMode,
+  FugitiveInPrison), combat, or is incapacitated.
+- Party Picker copies the DB and combat checks. It does not copy the incapacitated check.
 
 ## 4. Script Extender and MCM
 

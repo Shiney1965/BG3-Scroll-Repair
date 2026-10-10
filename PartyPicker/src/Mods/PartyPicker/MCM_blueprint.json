@@ -17,21 +17,24 @@
                             "Type": "slider_int",
                             "Default": 6,
                             "Description": "How many characters can be in the active party, including your own. Applied when you load a save and whenever you change it.",
-                            "Options": { "Min": 4, "Max": 16 }
+                            "Options": {
+                                "Min": 4,
+                                "Max": 16
+                            }
                         },
                         {
                             "Id": "teleport_joiners",
                             "Name": "Bring new members to you",
                             "Type": "checkbox",
                             "Default": true,
-                            "Description": "When a companion joins from camp, move them to your character. Off: they walk in on their own as in vanilla."
+                            "Description": "When a companion joins from camp, move them next to your character. Off: they stay where they are until you fetch them or travel."
                         },
                         {
                             "Id": "block_in_combat",
                             "Name": "No party changes in combat",
                             "Type": "checkbox",
                             "Default": true,
-                            "Description": "Refuse to change the party while anyone in it is in combat, as the vanilla dismiss button does."
+                            "Description": "Refuse to change the party while your character, or anyone joining or leaving, is in combat."
                         }
                     ]
                 },
@@ -44,21 +47,21 @@
                             "Name": "Ask before a long rest",
                             "Type": "checkbox",
                             "Default": true,
-                            "Description": "The camp has four beds. If your party is larger, End the Day is held and you are asked which four to keep tonight. The others go to camp and rejoin when you wake up."
-                        },
-                        {
-                            "Id": "prompt_raft",
-                            "Name": "Ask before the Grymforge raft",
-                            "Type": "checkbox",
-                            "Default": true,
-                            "Description": "The Ebonlake raft carries four. If your party is larger, the crossing is held and you are asked which four to take. The others go to camp and rejoin when the raft lands."
+                            "Description": "The camp has four beds, and the game only puts four party members to bed. If your party is larger, End the Day is held and you are asked which four to keep tonight. The others wait in camp."
                         },
                         {
                             "Id": "auto_restore",
-                            "Name": "Restore the full party afterwards",
+                            "Name": "Bring everyone back after the rest",
                             "Type": "checkbox",
                             "Default": true,
-                            "Description": "Put the trimmed party back after the rest or the crossing. Off: use the Restore button on the Party tab when you want them back."
+                            "Description": "When you wake up, the members who waited in camp rejoin, as far as the party limit allows. Nobody is sent away to make room. Off: use Restore on the Party tab."
+                        },
+                        {
+                            "Id": "extend_raft",
+                            "Name": "Let the whole party ride the Grymforge raft",
+                            "Type": "checkbox",
+                            "Default": true,
+                            "Description": "The Ebonlake raft takes everyone aboard but only has four landing spots, so members five and up are left behind. This adds landing spots so everyone arrives."
                         }
                     ]
                 }

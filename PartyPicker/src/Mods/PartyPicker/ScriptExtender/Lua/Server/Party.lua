@@ -2,18 +2,23 @@
 --
 -- Recruiting and dismissing go through the same story procedures the game's
 -- own buttons and dialogs use, so the story's bookkeeping (factions, camp,
--- DB_Players, the party-full flag) stays consistent:
---   add      PROC_GLO_PartyMembers_CheckAdd(origin, player)
---            PROC_Hirelings_AddToParty(hireling, avatar)
---   to camp  PROC_GLO_PartyMembers_Remove(member, dismisser, 1)
--- Source: Shared story goal _GLO_Shared_PartyMembers.txt and SharedDev
--- Hirelings.txt; documented in docs/RESEARCH.md.
+-- DB_Players, the party-full flag, hireling flags) stays consistent:
+--   origin to party     PROC_GLO_PartyMembers_CheckAdd(origin, avatar)
+--   origin to camp      PROC_GLO_PartyMembers_Remove(origin, avatar, 1)
+--   hireling to party   PROC_Hirelings_TakeFromCamp(hireling, avatar)   (from camp)
+--                       PROC_Hirelings_AddToParty(hireling, avatar)     (otherwise)
+--   hireling to camp    PROC_GLO_PartyMembers_Remove(hireling, avatar, 0)
+--                       + PROC_Hirelings_SendToCamp(hireling)
+-- Sources: Shared goal _GLO_Shared_PartyMembers.txt, SharedDev Hirelings.txt
+-- (L447-458, L670-682, L1095-1096). See docs/RESEARCH.md.
 
 local Party = {}
 
 -- Each change waits for the story to finish the previous step.
 local ADD_DELAY_MS = 250
 local VERIFY_DELAY_MS = 600
+
+local HIRELING_IN_CAMP_FLAG = "Hireling_State_InCamp_e33aa0df-fcfc-4a30-8169-516d3956f02a"
 
 local busy = false
 
@@ -42,10 +47,32 @@ local function isTrue(fn, ...)
     return ok and v == 1
 end
 
-function Party.Host()
+local function userOf(id)
+    local ok, u = pcall(Osi.GetReservedUserID, id)
+    if ok then return u end
+    return nil
+end
+
+-- The character the host is controlling right now. The game's own scripts
+-- note this can be a companion rather than the avatar
+-- (_GLO_Shared_Origins.txt: "GetHostCharacter(_Avatar) AND NOT DB_Avatars").
+function Party.HostCharacter()
     local ok, host = pcall(Osi.GetHostCharacter)
     if ok then return host end
     return nil
+end
+
+-- The host's own avatar: the one to recruit and dismiss "by", as the game's
+-- dialogs do. Falls back to the controlled character.
+function Party.HostAvatar()
+    local controlled = Party.HostCharacter()
+    if not controlled then return nil end
+    local hostUser = userOf(controlled)
+    local players = uuidSet("DB_Players")
+    for _, id in ipairs(column1("DB_Avatars")) do
+        if userOf(id) == hostUser and players[PP.BareUuid(id)] then return id end
+    end
+    return controlled
 end
 
 function Party.DisplayName(id)
@@ -87,14 +114,10 @@ end
 
 -- Everyone the player could choose from.
 -- Each entry: id (Osiris string), uuid, name, active, inCamp, avatar,
--- hireling, dead, locked (cannot be benched by this mod), lockReason.
+-- hireling, dead, locked (this mod never moves them), lockReason.
 function Party.Roster()
-    local host = Party.Host()
-    local hostUser = nil
-    if host then
-        local ok, u = pcall(Osi.GetReservedUserID, host)
-        if ok then hostUser = u end
-    end
+    local controlled = Party.HostCharacter()
+    local hostUser = controlled and userOf(controlled) or nil
 
     local entries, byUuid = {}, {}
     local function add(id, field)
@@ -114,6 +137,7 @@ function Party.Roster()
 
     local avatars = uuidSet("DB_Avatars")
     local inCamp = uuidSet("DB_InCamp")
+    local controlledUuid = PP.BareUuid(controlled)
 
     local out = {}
     for _, e in ipairs(entries) do
@@ -124,11 +148,14 @@ function Party.Roster()
             e.name = Party.DisplayName(e.id)
             e.active = e.active == true
             e.hireling = e.hireling == true
-            if e.avatar and e.active then
+            if e.avatar then
+                -- Avatars are never recruited or dismissed by this mod.
                 e.locked, e.lockReason = true, "player character"
+            elseif e.active and e.uuid == controlledUuid then
+                e.locked, e.lockReason = true, "you are controlling them"
             elseif e.active and hostUser ~= nil then
-                local ok, user = pcall(Osi.GetReservedUserID, e.id)
-                if ok and user ~= nil and user ~= hostUser then
+                local user = userOf(e.id)
+                if user ~= nil and user ~= hostUser then
                     e.locked, e.lockReason = true, "controlled by another player"
                 end
             end
@@ -165,10 +192,11 @@ local BLOCKING_DBS = {
     { "DB_FastTravelBlock_BlockedZone_StatusSet", 1 },
     { "DB_FastTravelBlock_CantMove_StatusSet", 1 },
     { "DB_FastTravelBlock_Arrested_StatusSet", 1 },
+    { "DB_FastTravelBlock_CampNightMode_StatusSet", 1 },
     { "DB_FastTravelBlock_FugitiveInPrison_StatusSet", 2 },
 }
 
-local function blockedReason(id, checkCombat)
+function Party.BlockedReason(id, checkCombat)
     if checkCombat and isTrue(Osi.IsInCombat, id) then return "is in combat" end
     for _, spec in ipairs(BLOCKING_DBS) do
         local name, arity = spec[1], spec[2]
@@ -183,31 +211,66 @@ local function blockedReason(id, checkCombat)
     return nil
 end
 
--- Make the active party exactly `wanted` (a list of uuids) plus any locked
--- members. `limit` defaults to the configured maximum. `done(result)` is
--- called once the change has been verified; result = { ok, message }.
--- Returns accepted, message: false if nothing was changed.
-function Party.Apply(wanted, limit, done)
+local function sendToCamp(e, avatar)
+    if e.hireling then
+        pcall(Osi.PROC_GLO_PartyMembers_Remove, e.id, avatar, 0)
+        pcall(Osi.PROC_Hirelings_SendToCamp, e.id)
+    else
+        local ok, err = pcall(Osi.PROC_GLO_PartyMembers_Remove, e.id, avatar, 1)
+        if not ok then PP.Log("remove failed for " .. e.name .. ": " .. tostring(err)) end
+    end
+end
+
+local function bringIn(e, avatar)
+    local ok, err
+    if e.hireling then
+        if isTrue(Osi.GetFlag, HIRELING_IN_CAMP_FLAG, e.id) then
+            ok, err = pcall(Osi.PROC_Hirelings_TakeFromCamp, e.id, avatar)
+        else
+            ok, err = pcall(Osi.PROC_Hirelings_AddToParty, e.id, avatar)
+        end
+    else
+        ok, err = pcall(Osi.PROC_GLO_PartyMembers_CheckAdd, e.id, avatar)
+    end
+    if not ok then PP.Log("add failed for " .. e.name .. ": " .. tostring(err)) end
+end
+
+-- Change the party.
+--   wanted:  list of uuids that should end up in the party (locked members
+--            are kept regardless).
+--   opts.limit:     max total size (default: configured maximum)
+--   opts.addOnly:   never send anyone to camp; add `wanted` members who are
+--                   not in the party, as far as the limit allows
+--   done(result):   called once verified; result = { ok, message, changed }
+-- Returns accepted, message. When accepted is false nothing was changed;
+-- `nothingToDo` is true when the party already matched.
+function Party.Apply(wanted, opts, done)
+    opts = opts or {}
     done = done or function() end
     if busy then return false, "A party change is already in progress." end
-    local host = Party.Host()
-    if not host then return false, "No host character found." end
-    limit = limit or Party.MaxSize()
+    local avatar = Party.HostAvatar()
+    if not avatar then return false, "No host character found." end
+    local limit = opts.limit or Party.MaxSize()
 
     local roster = Party.Roster()
     local byUuid = {}
     for _, e in ipairs(roster) do byUuid[e.uuid] = e end
 
-    local keep = {}
-    local count = 0
+    local keep, count = {}, 0
     for _, e in ipairs(roster) do
-        if e.locked then keep[e.uuid] = true; count = count + 1 end
+        if e.locked and e.active then keep[e.uuid] = true; count = count + 1 end
+        if opts.addOnly and e.active and not keep[e.uuid] then keep[e.uuid] = true; count = count + 1 end
     end
     for _, u in ipairs(wanted or {}) do
         local e = byUuid[u]
-        if not e then return false, "Unknown character " .. tostring(u) .. "." end
-        if e.dead then return false, e.name .. " is dead." end
-        if not keep[u] then keep[u] = true; count = count + 1 end
+        if e and not keep[u] and not e.dead and not (e.locked and not e.active) then
+            if opts.addOnly and count >= limit then break end
+            keep[u] = true; count = count + 1
+        elseif not e and not opts.addOnly then
+            return false, "Unknown character " .. tostring(u) .. "."
+        elseif e and e.dead and not opts.addOnly then
+            return false, e.name .. " is dead."
+        end
     end
     if count > limit then
         return false, string.format("%d selected, but the limit is %d.", count, limit)
@@ -220,17 +283,15 @@ function Party.Apply(wanted, limit, done)
         if keep[e.uuid] and not e.active then toAdd[#toAdd + 1] = e end
     end
     if #toRemove == 0 and #toAdd == 0 then
-        return false, "The party is already like that."
+        return false, "The party is already like that.", true
     end
 
     local checkCombat = PP.Setting("block_in_combat", true) ~= false
-    for _, e in ipairs({ { name = "You", id = host } }) do
-        local why = blockedReason(e.id, checkCombat)
-        if why then return false, "Party changes are blocked: your character " .. why .. "." end
-    end
+    local why = Party.BlockedReason(avatar, checkCombat)
+    if why then return false, "Party changes are blocked: your character " .. why .. "." end
     for _, list in ipairs({ toRemove, toAdd }) do
         for _, e in ipairs(list) do
-            local why = blockedReason(e.id, checkCombat)
+            why = Party.BlockedReason(e.id, checkCombat)
             if why then return false, e.name .. " " .. why .. "." end
         end
     end
@@ -238,14 +299,9 @@ function Party.Apply(wanted, limit, done)
     busy = true
     -- Room for the new members before anyone is added: CheckAdd does nothing
     -- while the story's party-full flag is set.
-    pcall(function()
-        Osi.SetMaxPartySizeOverride(math.max(Party.MaxSize(), count))
-    end)
+    pcall(Osi.SetMaxPartySizeOverride, math.max(Party.MaxSize(), count))
 
-    for _, e in ipairs(toRemove) do
-        local ok, err = pcall(Osi.PROC_GLO_PartyMembers_Remove, e.id, host, 1)
-        if not ok then PP.Log("remove failed for " .. e.name .. ": " .. tostring(err)) end
-    end
+    for _, e in ipairs(toRemove) do sendToCamp(e, avatar) end
     pcall(Osi.PROC_CheckPartyFull)
 
     -- Any error in the delayed steps must still release `busy` and report.
@@ -255,46 +311,41 @@ function Party.Apply(wanted, limit, done)
             if not ok then
                 busy = false
                 PP.Log("party change failed: " .. tostring(err))
-                done({ ok = false, message = "Party change failed: " .. tostring(err) })
+                done({ ok = false, changed = true, message = "Party change failed: " .. tostring(err) })
             end
         end
     end
 
     Ext.Timer.WaitFor(ADD_DELAY_MS, guarded(function()
-        for _, e in ipairs(toAdd) do
-            local ok, err
-            if e.hireling then
-                ok, err = pcall(Osi.PROC_Hirelings_AddToParty, e.id, host)
-            else
-                ok, err = pcall(Osi.PROC_GLO_PartyMembers_CheckAdd, e.id, host)
-            end
-            if not ok then PP.Log("add failed for " .. e.name .. ": " .. tostring(err)) end
-        end
+        for _, e in ipairs(toAdd) do bringIn(e, avatar) end
 
         Ext.Timer.WaitFor(VERIFY_DELAY_MS, guarded(function()
             local failed = {}
-            local hostInCamp = next(Osi.DB_InCamp:Get(host) or {}) ~= nil
+            local avatarInCamp = next(Osi.DB_InCamp:Get(avatar) or {}) ~= nil
             local bring = PP.Setting("teleport_joiners", true) ~= false
             for _, e in ipairs(toAdd) do
-                if isTrue(Osi.IsInPartyWith, e.id, host) then
-                    if bring and not hostInCamp then
-                        pcall(Osi.TeleportTo, e.id, host)
-                        pcall(Osi.AttachToPartyGroup, e.id, host)
+                if isTrue(Osi.IsInPartyWith, e.id, avatar) then
+                    if bring and not avatarInCamp then
+                        -- Same 6-argument form the raft script uses.
+                        pcall(Osi.TeleportTo, e.id, avatar, "", 0, 1, 1)
+                        pcall(Osi.AttachToPartyGroup, e.id, avatar)
                     end
                 else
                     failed[#failed + 1] = e.name .. " did not join"
                 end
             end
             for _, e in ipairs(toRemove) do
-                if isTrue(Osi.IsInPartyWith, e.id, host) then
+                if isTrue(Osi.IsInPartyWith, e.id, avatar) then
                     failed[#failed + 1] = e.name .. " did not leave"
                 end
             end
             busy = false
             if #failed == 0 then
-                done({ ok = true, message = string.format("Party updated: %d joined, %d sent to camp.", #toAdd, #toRemove) })
+                done({ ok = true, changed = true,
+                    message = string.format("Party updated: %d joined, %d sent to camp.", #toAdd, #toRemove) })
             else
-                done({ ok = false, message = "Party partly updated. " .. table.concat(failed, "; ") .. "." })
+                done({ ok = false, changed = true,
+                    message = "Party partly updated. " .. table.concat(failed, "; ") .. "." })
             end
         end))
     end))

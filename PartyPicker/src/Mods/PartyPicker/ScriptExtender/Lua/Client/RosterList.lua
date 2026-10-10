@@ -43,7 +43,8 @@ function RosterList.Draw(parent, entries, opts)
     for _, e in ipairs(entries) do
         local initial
         if e.locked then
-            initial = true
+            -- Locked members stay as they are: ticked if in the party.
+            initial = e.active == true
         elseif opts.preselect then
             initial = opts.preselect(e) == true
         else

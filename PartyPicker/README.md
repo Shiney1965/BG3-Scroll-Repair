@@ -7,13 +7,13 @@ draft, not yet run in game.**
   checkbox. Tick who you want with you and press **Apply**. There are no hotbar spells and no
   talking to companions to invite or dismiss them.
 - **Larger parties.** A slider sets the party limit from 4 to 16.
-- **Asks when the game needs four.** The game's own scripts handle only four party members in two
-  places:
-  - **Long rest:** the camp has four beds.
-  - **The Grymforge raft** in the Underdark: it has four seats.
-  
-  If your party is larger, Party Picker holds the rest or the crossing and opens a window asking
-  which four to keep. The others wait in camp and rejoin afterwards.
+- **The two places the game handles only four:**
+  - **Long rest.** The camp has four beds, and the game puts only four party members to bed. If
+    your party is larger, End the Day is held and a window asks which four to keep tonight. The
+    others wait in camp and rejoin when you wake up. Nobody is sent away to make room for them.
+  - **The Grymforge raft (Underdark).** The raft already takes everyone aboard but has only four
+    landing spots, so members five and up are left at the old dock. Party Picker adds landing
+    spots so the whole party arrives. No choice is needed.
 
 ## Requirements
 
@@ -27,16 +27,17 @@ game's bookkeeping stays correct:
 
 | Task | Story procedure |
 |---|---|
-| Join | `PROC_GLO_PartyMembers_CheckAdd` (origins), `PROC_Hirelings_AddToParty` (hirelings) |
-| Go to camp | `PROC_GLO_PartyMembers_Remove(member, you, 1)` |
+| Join | `PROC_GLO_PartyMembers_CheckAdd` (companions), `PROC_Hirelings_TakeFromCamp` (hirelings) |
+| Go to camp | `PROC_GLO_PartyMembers_Remove(member, your avatar, 1)`; hirelings also `PROC_Hirelings_SendToCamp` |
 | Party limit | `SetMaxPartySizeOverride`, re-applied on each level load |
 
-The two four-member situations are hooked with Script Extender listeners. No game file is replaced
-and the executable is not patched:
+The two four-member situations are handled with Script Extender listeners and story databases.
+No game file is replaced and the executable is not patched:
 
 - **Long rest:** Party Picker adds a story reason to the camp's existing "not ready for night"
-  check, which is the same mechanism the game uses to block resting in some story moments.
-- **Raft:** Party Picker fails the raft's ready check the same way the script does for Glut's owner.
+  check. This is the mechanism the game itself uses to block resting in some story moments.
+- **Raft:** Party Picker adds rows 5–16 to the raft's landing-position table. They reuse the
+  existing positions at each dock.
 
 Details and sources are in [docs/RESEARCH.md](docs/RESEARCH.md).
 
@@ -52,7 +53,7 @@ src/Mods/PartyPicker/
     BootstrapClient.lua          MCM Party tab, picker window, !pp fallback
     Shared/Common.lua            channels, helpers
     Server/Party.lua             roster, apply changes
-    Server/Restrictions.lua      long rest and raft hooks
+    Server/Restrictions.lua      long-rest hold/restore, raft landing spots
     Client/PartyTab.lua          the Party tab
     Client/PickFour.lua          the pick-four window
     Client/RosterList.lua        checkbox list used by both
@@ -74,7 +75,13 @@ Multitool. This is the same way Scroll Repair was packed. No `.pak` has been bui
 
 - Not yet tested in game. See [docs/TESTING.md](docs/TESTING.md) for the steps and which hooks are
   most at risk.
-- Multiplayer: only the host can change the party, and other players' characters are never moved.
+- Multiplayer: only the host can change the party. Player characters and anyone another player
+  controls are never moved.
+- The list is everyone the story counts as recruited (`DB_PartOfTheTeam`). A companion the story
+  is keeping in camp for a scene can still be ticked, because the add procedure does not repeat the
+  checks the recruitment dialogues make. Whether that causes trouble is untested.
+- Turning the raft setting off does not remove landing spots that were already added. They are
+  only used when more than four people ride the raft.
 - Dialogue still seats the speaker plus three. That is not changed.
 - Quest items carried by member 5+ are sometimes not registered, per Party Limit Begone's notes.
   That is not addressed.

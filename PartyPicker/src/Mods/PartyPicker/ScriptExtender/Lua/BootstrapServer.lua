@@ -16,7 +16,7 @@ local function rosterReply()
     return {
         entries = entries,
         maxSize = Party.MaxSize(),
-        pending = pending and { reason = pending.reason, stage = pending.stage } or nil,
+        pending = pending and { reason = pending.reason, trimmed = pending.trimmed == true } or nil,
     }
 end
 
@@ -30,40 +30,54 @@ local function peerToUserId(peer)
 end
 
 local function isHostUser(peer)
-    local host = Party.Host()
+    local host = Party.HostCharacter()
     if not host then return false end
     local ok, hostUser = pcall(Osi.GetReservedUserID, host)
     if not ok or hostUser == nil then return false end
     return hostUser == peer or hostUser == peerToUserId(peer)
 end
 
-PP.Net.Roster:SetRequestHandler(function()
-    local ok, reply = pcall(rosterReply)
-    if ok then return reply end
-    PP.Log("roster failed: " .. tostring(reply))
-    return { entries = {}, maxSize = Party.MaxSize(), error = tostring(reply) }
-end)
+-- NetChannel only replies when the handler returns normally
+-- (bg3se NetChannel.lua), so every handler is wrapped: an error must still
+-- reach the client instead of leaving it waiting.
+local function safeHandler(fn)
+    return function(data, user)
+        local ok, reply = pcall(fn, data, user)
+        if ok then return reply end
+        PP.Log("request failed: " .. tostring(reply))
+        return { accepted = false, message = "Party Picker error: " .. tostring(reply), error = tostring(reply) }
+    end
+end
 
--- data = { uuids = {...}, reason = nil | "rest" | "raft", keepAll = bool }
-PP.Net.Apply:SetRequestHandler(function(data, user)
+PP.Net.Roster:SetRequestHandler(safeHandler(function()
+    return rosterReply()
+end))
+
+-- data = { uuids = {...}, reason = nil | "rest", keepAll = bool }
+PP.Net.Apply:SetRequestHandler(safeHandler(function(data, user)
     if not isHostUser(user) then
         return { accepted = false, message = "Only the host can change the party." }
     end
     data = data or {}
     if data.keepAll and data.reason then
         Restrictions.BypassOnce(data.reason)
-        return { accepted = true, message = "Keeping everyone this time. Try again to continue." }
+        return { accepted = true, message = "Keeping everyone this time. Press End the Day again." }
     end
-    local limit = nil
-    if data.reason then limit = PP.RESTRICTED_SIZE end
-    local accepted, message = Party.Apply(data.uuids or {}, limit, function(result)
+    local opts = {}
+    if data.reason then opts.limit = PP.RESTRICTED_SIZE end
+    local accepted, message = Party.Apply(data.uuids or {}, opts, function(result)
         Restrictions.Notice(result.message, result.ok and "info" or "warning")
-        if result.ok and data.reason then Restrictions.OnTrimmed(data.reason) end
+        if data.reason then
+            Restrictions.OnTrimmed(data.reason, result)
+        elseif result.changed then
+            -- A party chosen by hand replaces any trim waiting to be undone.
+            Restrictions.ClearPending()
+        end
     end)
     return { accepted = accepted, message = message }
-end)
+end))
 
-PP.Net.Restore:SetRequestHandler(function(_, user)
+PP.Net.Restore:SetRequestHandler(safeHandler(function(_, user)
     if not isHostUser(user) then
         return { accepted = false, message = "Only the host can change the party." }
     end
@@ -71,12 +85,13 @@ PP.Net.Restore:SetRequestHandler(function(_, user)
         Restrictions.Notice(result.message, result.ok and "info" or "warning")
     end)
     return { accepted = accepted, message = message }
-end)
+end))
 
 Restrictions.Register()
 
 Ext.Osiris.RegisterListener("LevelGameplayStarted", 2, "after", function()
     Party.ApplyMaxSize()
+    Restrictions.ExtendRaft()
 end)
 
 -- MCM fires this in both contexts (BG3-MCM Server/MCMServer.lua).
@@ -84,6 +99,7 @@ pcall(function()
     Ext.ModEvents.BG3MCM["MCM_Setting_Saved"]:Subscribe(function(payload)
         if not payload or payload.modUUID ~= ModuleUUID then return end
         if payload.settingId == "max_party_size" then Party.ApplyMaxSize() end
+        if payload.settingId == "extend_raft" then Restrictions.ExtendRaft() end
     end)
 end)
 

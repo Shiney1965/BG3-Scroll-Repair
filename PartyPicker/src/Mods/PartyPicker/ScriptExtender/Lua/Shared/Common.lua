@@ -41,4 +41,12 @@ PP.Net = PP.Net or {
     Notice = Ext.Net.CreateChannel(ModuleUUID, "Notice"),
 }
 
+-- The trimmed party waiting to be restored; saved with the game, server-only.
+-- Registered in both contexts as bg3se Docs/API.md recommends.
+pcall(function()
+    Ext.Vars.RegisterModVariable(ModuleUUID, "Pending", {
+        Server = true, Client = false, SyncToClient = false,
+    })
+end)
+
 return PP

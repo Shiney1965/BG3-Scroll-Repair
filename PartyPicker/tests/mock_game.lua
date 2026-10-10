@@ -87,7 +87,8 @@ end
 local Osi = {}
 M.Osi = Osi
 
-function Osi.GetHostCharacter() return M.host.id end
+-- The character the host controls; may be a companion (M.controlled).
+function Osi.GetHostCharacter() return (M.controlled or M.host).id end
 function Osi.GetReservedUserID(id) return (char(id) or {}).user end
 function Osi.IsSummon(id) return (char(id) or {}).summon and 1 or 0 end
 function Osi.IsDead(id) return (char(id) or {}).dead and 1 or 0 end
@@ -100,7 +101,25 @@ function Osi.IsInPartyWith(a, b)
     local inP = function(x) return #M.db("DB_Players"):Get(x) > 0 end
     return (inP(a) and inP(b)) and 1 or 0
 end
-function Osi.TeleportTo(a, b) M.teleported[#M.teleported + 1] = uuidOf(a) end
+-- Script Extender matches Osiris functions by exact argument count; the
+-- header has overloads with 5, 6 and 8 arguments (Osi.lua).
+function Osi.TeleportTo(...)
+    local n = select("#", ...)
+    assert(n == 5 or n == 6 or n == 8, "TeleportTo has no overload with " .. n .. " arguments")
+    M.teleported[#M.teleported + 1] = uuidOf((...))
+end
+M.flags = {}
+function Osi.GetFlag(flag, obj) return M.flags[flag .. "|" .. uuidOf(obj)] and 1 or 0 end
+M.counters = { Hirelings_InCamp_Count = 0 }
+-- SharedDev Hirelings.txt L447-451, L670-675.
+function Osi.PROC_Hirelings_SendToCamp(h)
+    M.flags["Hireling_State_InCamp_e33aa0df-fcfc-4a30-8169-516d3956f02a|" .. uuidOf(h)] = true
+    M.counters.Hirelings_InCamp_Count = M.counters.Hirelings_InCamp_Count + 1
+end
+function Osi.PROC_Hirelings_TakeFromCamp(h, avatar)
+    Osi.PROC_Hirelings_AddToParty(h, avatar)
+    M.counters.Hirelings_InCamp_Count = M.counters.Hirelings_InCamp_Count - 1
+end
 function Osi.AttachToPartyGroup() end
 function Osi.SetReadyCheckBlocked(id, v) M.readyCheckBlocked[uuidOf(id)] = v end
 
@@ -120,7 +139,8 @@ function Osi.PROC_Hirelings_AddToParty(h, avatar)
     Osi.PROC_GLO_PartyMembers_CheckAdd(h, avatar)
 end
 function Osi.PROC_GLO_PartyMembers_Remove(member, dismisser, force)
-    assert(force == 1, "unforced removal")
+    assert(dismisser ~= nil and force ~= nil, "two-argument Remove")
+    assert(#M.db("DB_Avatars"):Get(member) == 0, "avatar removed")
     M.db("DB_Players"):Delete(member)
     if #M.db("DB_PartOfTheTeam"):Get(member) > 0 then M.db("DB_InCamp")(member) end
     Osi.PROC_CheckPartyFull()
