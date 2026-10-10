@@ -68,8 +68,16 @@ docs/                            research notes and the in-game test plan
 
 ## Building the .pak
 
-Pack `src/` with LSLib's Divine (`create-package`; give it absolute paths) or with BG3 Modder's
-Multitool. This is the same way Scroll Repair was packed. No `.pak` has been built yet.
+```
+pip install lz4
+python3 tools/lspk.py create src PartyPicker.pak
+python3 tools/lspk.py list PartyPicker.pak      # inspect
+```
+
+`tools/lspk.py` writes LSPK version 18, the format LSLib's Divine writes for BG3 (layout taken
+from LSLib's `PackageFormat.cs` and `PackageWriter.cs`). It was checked by rebuilding Scroll
+Repair's `src/`: the result is byte-identical to the Divine-built `ScrollRepair.pak`. Divine or
+BG3 Modder's Multitool can still be used instead. See [RUN_CARD.md](RUN_CARD.md) to install and test.
 
 ## Known limits of this draft
 
