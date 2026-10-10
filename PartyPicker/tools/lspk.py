@@ -125,7 +125,9 @@ def collect(src_dir):
     items = []
 
     def walk(folder, prefix):
-        entries = sorted(os.listdir(folder))
+        # Hidden files and folders are skipped, as LSLib's ExcludeHidden does
+        # (PackageCommon.cs).
+        entries = sorted(n for n in os.listdir(folder) if not n.startswith("."))
         for n in entries:
             full = os.path.join(folder, n)
             if os.path.isfile(full):
