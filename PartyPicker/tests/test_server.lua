@@ -183,7 +183,48 @@ reply = apply({ uuids = { ids.Shadowheart } })
 check(reply and reply.accepted == false and tostring(reply.message):find("boom"), "error reaches the client")
 Party.Roster = realRoster
 
--- 13. Settings off: no hold, no raft change.
+-- 13. Bypass expires if End the Day is not pressed soon after.
+apply({ reason = "rest", keepAll = true })
+M.runLongTimers()
+M.fire("QRY_Camp_CheckPlayersReadyForNightModeStoryReasons", 0, "before")
+check(#M.db("DB_Camp_PlayerNotReadyForNightMode_CustomStoryReason").rows == 1, "bypass expired")
+M.db("DB_Camp_PlayerNotReadyForNightMode_CustomStoryReason"):Delete(nil)
+
+-- 14. A dead party member is never sent to camp by an Apply.
+c.Gale.dead = true
+Osi.PROC_GLO_PartyMembers_Remove(c.Wyll.id, M.host.id, 1)
+Osi.PROC_GLO_PartyMembers_CheckAdd(c.Gale.id, M.host.id)
+reply = apply({ uuids = { ids.Shadowheart, ids.Astarion, ids.Laezel, ids.Karlach } })
+check(#M.db("DB_Players"):Get(c.Gale.id) == 1, "dead member kept in the party")
+c.Gale.dead = false
+
+-- 15. Restore with the party already over a lowered limit: nothing to do.
+settings.max_party_size = 4
+M.fire("PROC_Camp_TryEnterNightModeFailed", 2, "after", M.host.id, "PartyPicker_PartyLargerThanFour")
+local p = Restrictions.GetPending(); p.trimmed = true; Ext.Vars.GetModVariables(ModuleUUID).Pending = p
+ok, message = Restrictions.Restore()
+check(ok and Restrictions.GetPending() == nil, "restore over a lowered limit clears the record")
+settings.max_party_size = 6
+
+-- 16. Night ends after LongRestFinished: restore runs again without warnings.
+M.broadcasts = {}
+M.fire("DB_Camp_NightMode", 1, "afterDelete", 1)
+M.runTimers()
+check(#M.broadcasts == 0, "no restore notice without a pending trim")
+
+-- 17. A dismissed avatar is listed but locked; raft rows added at disembark.
+local other = M.addChar("OtherTav", U(2), { user = 131073 })
+M.db("DB_PartOfTheTeam")(other.id)
+M.db("DB_DismissedAvatar")(other.id)
+for _, e in ipairs(Party.Roster()) do
+    if e.name == "OtherTav" then check(e.locked, "dismissed avatar locked") end
+end
+local camp = "UND_EbonLake_State_RaftAtCamp_526b966d-e826-4290-8331-e4747c1df3a5"
+for i = 1, 4 do M.db(RAFT)(camp, i, "S_UND_DarkLake_BoatPassengerPositionAtCamp_3478b34d-0e4f-4a4b-8f9f-b7d9361eec8b") end
+M.fire("PROC_UND_EbonLake_DisembarkCrew", 1, "before", camp)
+check(#M.db(RAFT):Get(camp, nil, nil) == 16, "late raft goal rows extended at disembark")
+
+-- 18. Settings off: no hold, no raft change.
 settings.prompt_long_rest = false
 M.fire("QRY_Camp_CheckPlayersReadyForNightModeStoryReasons", 0, "before")
 check(#M.db("DB_Camp_PlayerNotReadyForNightMode_CustomStoryReason").rows == 0, "setting off: no hold")

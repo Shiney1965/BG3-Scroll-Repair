@@ -8,6 +8,7 @@ local M = {}
 M.LUA_ROOT = LUA_ROOT -- set by the runner
 M.log = {}
 M.timers = {}
+M.longTimers = {}
 M.listeners = {}
 M.broadcasts = {}
 M.console = {}
@@ -181,8 +182,10 @@ M.Ext = {
         return required[path]
     end,
     Timer = {
-        WaitFor = function(ms, fn) M.timers[#M.timers + 1] = fn end,
-        WaitForRealtime = function(ms, fn) M.timers[#M.timers + 1] = fn end,
+        -- Timers of a minute or more are expiry timers; tests fire them
+        -- explicitly with M.runLongTimers().
+        WaitFor = function(ms, fn) table.insert(ms >= 60000 and M.longTimers or M.timers, fn) end,
+        WaitForRealtime = function(ms, fn) table.insert(ms >= 60000 and M.longTimers or M.timers, fn) end,
     },
     Vars = {
         RegisterModVariable = function() end,
@@ -214,6 +217,12 @@ function M.runTimers()
         local fn = table.remove(M.timers, 1)
         fn()
     end
+end
+
+function M.runLongTimers()
+    local list = M.longTimers
+    M.longTimers = {}
+    for _, fn in ipairs(list) do fn() end
 end
 
 function M.fire(name, arity, when, ...)

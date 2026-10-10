@@ -57,8 +57,12 @@ function Restrictions.ClearPending() setPending(nil) end
 -- "Keep everyone this time" skips the next hold of that kind.
 local bypassOnce = {}
 
+local BYPASS_EXPIRES_MS = 120000
+
 function Restrictions.BypassOnce(reason)
     bypassOnce[reason] = true
+    -- Only for the End the Day press that follows, not one much later.
+    Ext.Timer.WaitForRealtime(BYPASS_EXPIRES_MS, function() bypassOnce[reason] = nil end)
     local p = Restrictions.GetPending()
     -- Only drop a record nobody was trimmed for; an earlier trim still
     -- waiting to be restored must survive.
@@ -128,6 +132,9 @@ local function autoRestore()
     end
     local tries = 0
     local function attempt()
+        -- Another trigger (or the player) may have finished the job already.
+        local current = Restrictions.GetPending()
+        if not current or not current.trimmed then return end
         tries = tries + 1
         local accepted, message = Restrictions.Restore(function(result)
             Restrictions.Notice(result.message, result.ok and "info" or "warning")
@@ -199,6 +206,19 @@ function Restrictions.Register()
 
     Ext.Osiris.RegisterListener("LongRestFinished", 0, "after", function()
         autoRestore()
+    end)
+
+    -- Party changes are blocked during camp night (CampNightMode); try again
+    -- once the camp switches back to day (GLO_Camp.txt DB_Camp_NightMode).
+    Ext.Osiris.RegisterListener("DB_Camp_NightMode", 1, "afterDelete", function()
+        autoRestore()
+    end)
+
+    -- The raft goal's rows may only appear after the level started (the
+    -- Underdark is in the Act 1 level), so extend again just before the
+    -- crew is landed: PROC_UND_EbonLake_DisembarkCrew reads the table.
+    Ext.Osiris.RegisterListener("PROC_UND_EbonLake_DisembarkCrew", 1, "before", function()
+        Restrictions.ExtendRaft()
     end)
 end
 

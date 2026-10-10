@@ -8,7 +8,7 @@
   procedures as documented in `docs/RESEARCH.md`. The mock checks `TeleportTo`'s argument count,
   refuses two-argument `Remove` calls and avatar removals, and models the hireling camp counter.
 
-The 50 checks cover:
+The 56 checks cover:
 - roster building and summon filtering;
 - a companion the host is controlling;
 - party changes from the MCM tab, including hirelings in camp;
@@ -19,7 +19,10 @@ The 50 checks cover:
 - restore when everyone is already back;
 - "keep everyone this time", including that it does not lose an earlier trim;
 - an error inside a request handler still reaching the client;
-- adding raft landing spots;
+- a dead party member never being sent to camp; dismissed avatars locked;
+- restore when the limit was lowered, and when night mode ends after the rest;
+- the one-time bypass expiring;
+- adding raft landing spots on level start and again just before landing;
 - the settings switches.
 
 A mock is not the game. These tests catch Lua mistakes and logic errors. They cannot show that the
@@ -40,9 +43,10 @@ Make a hard save first. All `[PartyPicker]` lines go to the Script Extender log
 | 6 | Switch to controlling a companion, open the Party tab | That companion is shown locked | Host-character handling |
 | 7 | With 6 in party, End the Day | Rest does not start; the picker opens | **Highest risk:** the QRY `before` listener plus `PROC_Camp_TryEnterNightModeFailed`. If the rest starts anyway, the user-query listener did not fire as the SE source suggests |
 | 8 | Pick 4, Keep, then End the Day again | Normal rest, four in beds | |
-| 9 | Wake up | The other 2 rejoin a couple of seconds later | `LongRestFinished` + add-only restore |
-| 10 | Save between 8 and 9, reload, then wake | Restore still happens | Mod variable persistence |
-| 11 | Act 1 Underdark: Ebonlake raft with 6 in party | All 6 arrive at the other dock | Raft landing spots 5–16. Log: `raft: added … landing positions` on entering the Underdark |
+| 9 | Wake up | The other 2 rejoin a few seconds later (after the camp returns to day) | `LongRestFinished` / end of night mode + add-only restore |
+| 10 | Trim to four, save before pressing End the Day, reload, rest, wake | Restore still happens | Mod variable persistence |
+| 11 | Act 1 Underdark: Ebonlake raft with 6 in party, to Grymforge and back | All 6 arrive at each dock | Raft landing spots 5–16. Log: `raft: added … landing positions` (at a level load or just before landing) |
+| 11b | Same, through the lake encounter (Duergar raft) | All 6 stay on the raft and continue | **Risk:** on the lake, members 5+ share the four on-raft spots; if the game pushes someone off the raft they may be left behind |
 | 12 | Multiplayer (host + 1) | Other player's tab is read-only; their characters stay locked | Peer id → user id conversion |
 
 If step 7 fails, there is a fallback. Turn off "Ask before a long rest", trim with the Party tab

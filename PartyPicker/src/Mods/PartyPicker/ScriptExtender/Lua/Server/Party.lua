@@ -67,6 +67,7 @@ end
 function Party.HostAvatar()
     local controlled = Party.HostCharacter()
     if not controlled then return nil end
+    if #Osi.DB_Avatars:Get(controlled) > 0 then return controlled end
     local hostUser = userOf(controlled)
     local players = uuidSet("DB_Players")
     for _, id in ipairs(column1("DB_Avatars")) do
@@ -136,6 +137,7 @@ function Party.Roster()
     for _, id in ipairs(column1("DB_Players")) do add(id, "active") end
 
     local avatars = uuidSet("DB_Avatars")
+    local dismissedAvatars = uuidSet("DB_DismissedAvatar")
     local inCamp = uuidSet("DB_InCamp")
     local controlledUuid = PP.BareUuid(controlled)
 
@@ -148,9 +150,14 @@ function Party.Roster()
             e.name = Party.DisplayName(e.id)
             e.active = e.active == true
             e.hireling = e.hireling == true
-            if e.avatar then
-                -- Avatars are never recruited or dismissed by this mod.
+            if e.avatar or dismissedAvatars[e.uuid] then
+                -- Avatars (including dismissed ones, which stay in
+                -- DB_PartOfTheTeam) are never recruited or dismissed here.
+                e.avatar = true
                 e.locked, e.lockReason = true, "player character"
+            elseif e.active and e.dead then
+                -- Never send a body to camp; the game handles revival.
+                e.locked, e.lockReason = true, "dead"
             elseif e.active and e.uuid == controlledUuid then
                 e.locked, e.lockReason = true, "you are controlling them"
             elseif e.active and hostUser ~= nil then
@@ -272,7 +279,7 @@ function Party.Apply(wanted, opts, done)
             return false, e.name .. " is dead."
         end
     end
-    if count > limit then
+    if count > limit and not opts.addOnly then
         return false, string.format("%d selected, but the limit is %d.", count, limit)
     end
     if count == 0 then return false, "Nobody selected." end

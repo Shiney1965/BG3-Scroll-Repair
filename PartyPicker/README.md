@@ -80,6 +80,7 @@ Multitool. This is the same way Scroll Repair was packed. No `.pak` has been bui
 - The list is everyone the story counts as recruited (`DB_PartOfTheTeam`). A companion the story
   is keeping in camp for a scene can still be ticked, because the add procedure does not repeat the
   checks the recruitment dialogues make. Whether that causes trouble is untested.
+- On the raft's lake stop, members 5+ share the four standing spots on the raft. This is untested.
 - Turning the raft setting off does not remove landing spots that were already added. They are
   only used when more than four people ride the raft.
 - Dialogue still seats the speaker plus three. That is not changed.

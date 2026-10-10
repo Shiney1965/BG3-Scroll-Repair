@@ -50,7 +50,7 @@ function RosterList.Draw(parent, entries, opts)
         else
             initial = e.active == true
         end
-        if e.dead then initial = false end
+        if e.dead and not e.locked then initial = false end
         ticked[e.uuid] = initial
 
         local cb = parent:AddCheckbox(label(e), initial)
