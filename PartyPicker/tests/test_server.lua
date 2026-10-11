@@ -224,7 +224,33 @@ for i = 1, 4 do M.db(RAFT)(camp, i, "S_UND_DarkLake_BoatPassengerPositionAtCamp_
 M.fire("PROC_UND_EbonLake_DisembarkCrew", 1, "before", camp)
 check(#M.db(RAFT):Get(camp, nil, nil) == 16, "late raft goal rows extended at disembark")
 
--- 18. Settings off: no hold, no raft change.
+-- 18. Reported in game 2026-10-11: Withers and summons were listed.
+local withers = M.addChar("Withers", "0133f2ad-e121-4590-b5f0-a79413919805")
+M.db("DB_PartOfTheTeam")(withers.id)
+M.db("DB_InCamp")(withers.id)
+local familiar = M.addChar("Familiar", U(41), { entitySummon = true })   -- IsSummon query misses it
+local cub = M.addChar("Cub", U(42), { follower = true })
+local undead = M.addChar("Undead", U(43))
+M.db("DB_PlayerSummons")(undead.id)
+local before = Party.ActiveCount()
+for _, ch in ipairs({ familiar, cub, undead }) do M.db("DB_Players")(ch.id) end
+local names = {}
+for _, e in ipairs(Party.Roster()) do names[e.name] = true end
+check(not names.Withers, "Withers not listed")
+check(not names.Familiar, "summon found only by its entity component not listed")
+check(not names.Cub, "party follower not listed")
+check(not names.Undead, "DB_PlayerSummons member not listed")
+check(Party.ActiveCount() == before, "summons and followers not counted against the limit")
+local excluded = {}
+for _, x in ipairs(Party.Excluded()) do excluded[x.name] = x.why end
+check(excluded.Withers == "Withers" and excluded.Familiar == "summon" and excluded.Cub == "follower",
+    "!pp_roster explains each exclusion")
+-- Applying a party must never touch them.
+reply = apply({ uuids = { ids.Shadowheart, ids.Astarion } })
+check(#M.db("DB_Players"):Get(familiar.id) == 1 and #M.db("DB_Players"):Get(cub.id) == 1
+    and #M.db("DB_Players"):Get(undead.id) == 1, "summons and followers stay with the party on Apply")
+
+-- 19. Settings off: no hold, no raft change.
 settings.prompt_long_rest = false
 M.fire("QRY_Camp_CheckPlayersReadyForNightModeStoryReasons", 0, "before")
 check(#M.db("DB_Camp_PlayerNotReadyForNightMode_CustomStoryReason").rows == 0, "setting off: no hold")

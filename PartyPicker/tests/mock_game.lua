@@ -70,7 +70,8 @@ M.teleported = {}
 function M.addChar(name, uuid, opts)
     opts = opts or {}
     local c = { id = name .. "_" .. uuid, uuid = uuid, name = name, user = opts.user or 65537,
-        summon = opts.summon, dead = opts.dead, inCombat = opts.inCombat }
+        summon = opts.summon, dead = opts.dead, inCombat = opts.inCombat, follower = opts.follower,
+        entitySummon = opts.entitySummon, entityFollower = opts.entityFollower }
     M.chars[uuid] = c
     return c
 end
@@ -91,7 +92,10 @@ M.Osi = Osi
 -- The character the host controls; may be a companion (M.controlled).
 function Osi.GetHostCharacter() return (M.controlled or M.host).id end
 function Osi.GetReservedUserID(id) return (char(id) or {}).user end
+-- `summon` = the game's IsSummon query says so; `entitySummon` = only the
+-- entity's IsSummon component says so (the case seen in game 2026-10-11).
 function Osi.IsSummon(id) return (char(id) or {}).summon and 1 or 0 end
+function Osi.IsPartyFollower(id) return (char(id) or {}).follower and 1 or 0 end
 function Osi.IsDead(id) return (char(id) or {}).dead and 1 or 0 end
 function Osi.IsInCombat(id) return (char(id) or {}).inCombat and 1 or 0 end
 function Osi.GetDisplayName(id) return "h_" .. uuidOf(id) end
@@ -202,7 +206,11 @@ M.Ext = {
             return c and c.name or ""
         end,
     },
-    Entity = { Get = function() return nil end },
+    Entity = { Get = function(u)
+        local c = M.chars[u]
+        if not c then return nil end
+        return { IsSummon = c.entitySummon and {} or nil, PartyFollower = c.entityFollower and {} or nil }
+    end },
     ModEvents = { BG3MCM = setmetatable({}, { __index = function()
         return { Subscribe = function() end }
     end }) },

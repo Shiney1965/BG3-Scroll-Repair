@@ -8,7 +8,7 @@
   procedures as documented in `docs/RESEARCH.md`. The mock checks `TeleportTo`'s argument count,
   refuses two-argument `Remove` calls and avatar removals, and models the hireling camp counter.
 
-The 56 checks cover:
+The 63 checks cover:
 - roster building and summon filtering;
 - a companion the host is controlling;
 - party changes from the MCM tab, including hirelings in camp;
@@ -23,6 +23,8 @@ The 56 checks cover:
 - restore when the limit was lowered, and when night mode ends after the rest;
 - the one-time bypass expiring;
 - adding raft landing spots on level start and again just before landing;
+- Withers, summons (including one only its entity component reveals) and followers: never listed,
+  never counted, never moved by Apply;
 - the settings switches.
 
 A mock is not the game. These tests catch Lua mistakes and logic errors. They cannot show that the
@@ -34,6 +36,13 @@ story procedures behave as documented in the current patch. The client UI is not
 work perfectly". v0.1.0 had first shown an MCM "Dependency issue detected" warning (it required MCM
 1.41); fixed in v0.1.1. Which of the steps below were exercised is not yet recorded, so none is
 marked passed individually.
+
+**2026-10-11, v0.1.1, second report:** "it includes Withers in the party roster, which is incorrect"
+and "summonses are listed there". Fixed in v0.1.2: Withers is excluded by his story id, and summons
+and followers are excluded by any of IsSummon / IsPartyFollower, DB_PlayerSummons /
+DB_PartyFollowers, or the entity's IsSummon / PartyFollower component. `!pp_roster` now also prints
+each excluded character and the reason. The test for v0.1.2: open the Party tab with a summon out
+(for example a familiar) and check that neither it nor Withers is listed.
 
 Make a hard save first. All `[PartyPicker]` lines go to the Script Extender log
 (`Extender Runtime *.log`).

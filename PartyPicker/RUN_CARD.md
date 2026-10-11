@@ -1,7 +1,7 @@
-# Party Picker: test run card (v0.1.1, first in-game test)
+# Party Picker: test run card (v0.1.2)
 
-**Pak:** `PartyPicker.pak` (23,707 bytes)
-SHA256 `3187775ebd74cff0773f35c44122e2f1297165f330511639696d39c8927e28ef`
+**Pak:** `PartyPicker.pak` (24,604 bytes)
+SHA256 `31ac9c8cbafa571f84945ab4b10100bbd6d763cee11b5e7202170e810840eda2`
 
 **Built with:** `python3 tools/lspk.py create src PartyPicker.pak`. Rebuilding Scroll Repair's
 `src/` with the same tool gives a pak byte-identical to the Divine-built `ScrollRepair.pak`.
@@ -13,6 +13,8 @@ SHA256 `3187775ebd74cff0773f35c44122e2f1297165f330511639696d39c8927e28ef`
    - **Mod Configuration Menu** 1.38 or newer, installed and active. Party Picker lists it as a dependency.
      (v0.1.0 wrongly required 1.41 and showed a "Dependency issue detected" warning on MCM 1.40.1;
      v0.1.1 requires 1.38, the first version with the API calls it uses.)
+   v0.1.2 (2026-10-11): the Party list no longer shows Withers, summons or party followers, and
+   they are never counted against the limit or sent to camp by Apply (Alan's report on v0.1.1).
 3. Quit the game.
 
 ## Install

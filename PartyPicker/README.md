@@ -1,6 +1,6 @@
 # Party Picker (BG3)
 
-A Baldur's Gate 3 mod that lets you choose who is in your party from a menu. **Status: v0.1.1 in
+A Baldur's Gate 3 mod that lets you choose who is in your party from a menu. **Status: v0.1.2 in
 first in-game testing.** Alan, 2026-10-11: "The mod seems to work perfectly" (which steps of
 [docs/TESTING.md](docs/TESTING.md) were covered is not yet recorded).
 
@@ -92,6 +92,9 @@ BG3 Modder's Multitool can still be used instead. See [RUN_CARD.md](RUN_CARD.md)
 - On the raft's lake stop, members 5+ share the four standing spots on the raft. This is untested.
 - Turning the raft setting off does not remove landing spots that were already added. They are
   only used when more than four people ride the raft.
+- Who is listed: everyone the story counts as recruited plus the active party, minus Withers and any
+  summon or follower. A non-joinable character added by another mod could still appear; `!pp_roster`
+  shows why each character is or is not listed.
 - Dialogue still seats the speaker plus three. That is not changed.
 - Quest items carried by member 5+ are sometimes not registered, per Party Limit Begone's notes.
   That is not addressed.

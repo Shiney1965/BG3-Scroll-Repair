@@ -44,7 +44,42 @@ end
 
 local function isTrue(fn, ...)
     local ok, v = pcall(fn, ...)
-    return ok and v == 1
+    return ok and (v == 1 or v == true)
+end
+
+-- Characters that are never offered in the party list.
+-- Withers (S_GLO_JergalAvatar, SharedDev story Hirelings.txt:715) lives in
+-- camp with the team but is not a party member.
+local NEVER_LIST = {
+    ["0133f2ad-e121-4590-b5f0-a79413919805"] = "Withers",
+}
+
+-- Summons and followers (familiars, conjured creatures, raised dead, pets
+-- that follow the party) never take a party slot; their summoner controls
+-- them. Any one of these signals is enough:
+--   Osi.IsSummon / Osi.IsPartyFollower (built-in queries),
+--   DB_PlayerSummons / DB_PartyFollowers (Shared story __AAA_FirstGoal.txt),
+--   the entity's IsSummon / PartyFollower components.
+local function companionFilter()
+    local summons = uuidSet("DB_PlayerSummons")
+    local followers = uuidSet("DB_PartyFollowers")
+    return function(id)
+        local u = PP.BareUuid(id)
+        if not u then return false, "no uuid" end
+        if NEVER_LIST[u] then return false, NEVER_LIST[u] end
+        if summons[u] then return false, "summon" end
+        if followers[u] then return false, "follower" end
+        if isTrue(Osi.IsSummon, id) then return false, "summon" end
+        if isTrue(Osi.IsPartyFollower, id) then return false, "follower" end
+        local okE, why = pcall(function()
+            local e = Ext.Entity.Get(u)
+            if e and e.IsSummon then return "summon" end
+            if e and e.PartyFollower then return "follower" end
+            return nil
+        end)
+        if okE and why then return false, why end
+        return true
+    end
 end
 
 local function userOf(id)
@@ -141,9 +176,10 @@ function Party.Roster()
     local inCamp = uuidSet("DB_InCamp")
     local controlledUuid = PP.BareUuid(controlled)
 
+    local isCompanion = companionFilter()
     local out = {}
     for _, e in ipairs(entries) do
-        if not isTrue(Osi.IsSummon, e.id) then
+        if isCompanion(e.id) then
             e.avatar = avatars[e.uuid] == true
             e.inCamp = inCamp[e.uuid] == true
             e.dead = isTrue(Osi.IsDead, e.id)
@@ -177,11 +213,30 @@ function Party.Roster()
 end
 
 function Party.ActiveCount()
+    local isCompanion = companionFilter()
     local n = 0
     for _, id in ipairs(column1("DB_Players")) do
-        if not isTrue(Osi.IsSummon, id) then n = n + 1 end
+        if isCompanion(id) then n = n + 1 end
     end
     return n
+end
+
+-- For !pp_roster: everyone the story tables mention and why each is or is
+-- not offered.
+function Party.Excluded()
+    local isCompanion = companionFilter()
+    local seen, out = {}, {}
+    for _, db in ipairs({ "DB_PartOfTheTeam", "DB_Hirelings_Hired", "DB_Players" }) do
+        for _, id in ipairs(column1(db)) do
+            local u = PP.BareUuid(id)
+            if u and not seen[u] then
+                seen[u] = true
+                local ok, why = isCompanion(id)
+                if not ok then out[#out + 1] = { name = Party.DisplayName(id), why = why, db = db } end
+            end
+        end
+    end
+    return out
 end
 
 function Party.ActiveUuids()

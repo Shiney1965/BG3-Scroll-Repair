@@ -114,6 +114,9 @@ Ext.RegisterConsoleCommand("pp_roster", function()
             e.dead and "dead " or "",
             e.locked and ("locked(" .. tostring(e.lockReason) .. ")") or ""))
     end
+    for _, x in ipairs(Party.Excluded()) do
+        PP.Log(string.format("%-24s not listed: %s (in %s)", x.name, x.why, x.db))
+    end
     PP.Log(string.format("active %d, limit %d (game reports %s)", Party.ActiveCount(), Party.MaxSize(),
         tostring(select(2, pcall(Osi.GetMaxPartySize)))))
 end)
