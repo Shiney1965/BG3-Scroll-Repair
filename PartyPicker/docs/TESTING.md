@@ -28,7 +28,12 @@ The 56 checks cover:
 A mock is not the game. These tests catch Lua mistakes and logic errors. They cannot show that the
 story procedures behave as documented in the current patch. The client UI is not covered.
 
-## In the game (not done yet)
+## In the game
+
+**2026-10-11, v0.1.1 (SHA-256 `3187775e...28ef`), MCM 1.40.1:** Alan reported "The mod seems to
+work perfectly". v0.1.0 had first shown an MCM "Dependency issue detected" warning (it required MCM
+1.41); fixed in v0.1.1. Which of the steps below were exercised is not yet recorded, so none is
+marked passed individually.
 
 Make a hard save first. All `[PartyPicker]` lines go to the Script Extender log
 (`Extender Runtime *.log`).
