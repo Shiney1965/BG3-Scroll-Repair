@@ -18,7 +18,7 @@ draft, not yet run in game.**
 ## Requirements
 
 - BG3 Script Extender v29 or newer (developed against v32).
-- Mod Configuration Menu 1.41 or newer.
+- Mod Configuration Menu 1.38 or newer (the first version with the table-style API calls this mod uses; developed against 1.41, Alan runs 1.40.1).
 
 ## How it works
 

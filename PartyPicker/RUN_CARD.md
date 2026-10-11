@@ -1,7 +1,7 @@
-# Party Picker: test run card (v0.1.0, first in-game test)
+# Party Picker: test run card (v0.1.1, first in-game test)
 
 **Pak:** `PartyPicker.pak` (23,707 bytes)
-SHA256 `4c003e3ed794c9f56e4d2c194c48f68dd33caf07b966ca008f10890020643269`
+SHA256 `3187775ebd74cff0773f35c44122e2f1297165f330511639696d39c8927e28ef`
 
 **Built with:** `python3 tools/lspk.py create src PartyPicker.pak`. Rebuilding Scroll Repair's
 `src/` with the same tool gives a pak byte-identical to the Divine-built `ScrollRepair.pak`.
@@ -10,7 +10,9 @@ SHA256 `4c003e3ed794c9f56e4d2c194c48f68dd33caf07b966ca008f10890020643269`
 1. Make a **hard save** in a new slot, e.g. `BACKUP before Party Picker`.
 2. Requirements:
    - BG3 Script Extender, with the console on (`"CreateConsole": true`).
-   - **Mod Configuration Menu** installed and active. Party Picker lists it as a dependency.
+   - **Mod Configuration Menu** 1.38 or newer, installed and active. Party Picker lists it as a dependency.
+     (v0.1.0 wrongly required 1.41 and showed a "Dependency issue detected" warning on MCM 1.40.1;
+     v0.1.1 requires 1.38, the first version with the API calls it uses.)
 3. Quit the game.
 
 ## Install
